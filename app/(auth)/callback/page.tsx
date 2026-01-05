@@ -9,11 +9,13 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     const finishAuth = async () => {
+      // 🔑 This reads token from #
       await supabase.auth.getSession();
 
-      // ✅ REMOVE HASH COMPLETELY
+      // 🔥 REMOVE HASH COMPLETELY
       window.history.replaceState(null, "", "/dashboard");
 
+      // 🚀 Redirect
       router.replace("/dashboard");
     };
 
@@ -22,7 +24,7 @@ export default function AuthCallbackPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <p>Signing you in…</p>
+      Signing you in...
     </div>
   );
 }
