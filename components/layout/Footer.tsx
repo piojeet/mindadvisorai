@@ -4,7 +4,7 @@ import Link from "next/link";
 export default function Footer() {
   return (
     <footer className="py-12 px-6 bg-foreground text-background">
-        <div className="container mx-auto max-w-6xl">
+        <div className="md:container mx-auto max-w-6xl">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <Link href="/" className="flex items-center gap-2">
               <Image src={'/logowhite.svg'} alt="" width={100} height={100} />

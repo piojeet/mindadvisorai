@@ -1,7 +1,7 @@
 "use client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { useProfile } from "@/hooks/useProfile";
+import { useProfile, type Profile } from "@/hooks/useProfile";
 import { useEffect, useState } from "react";
 import { Skeleton } from "../ui/skeleton";
 import {
@@ -12,10 +12,13 @@ import {
   CardTitle,
 } from "../ui/card";
 import { Button } from "../ui/button";
-import { Check, CreditCard, Loader2, LogOut, Target, User } from "lucide-react";
+import { Check, CreditCard, Loader2, LogOut, Sparkles, Target, User } from "lucide-react";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Badge } from "../ui/badge";
+import { useRazorpay } from "@/hooks/useRazorpay";
 
 const AVAILABLE_GOALS = [
   "Career",
@@ -30,7 +33,8 @@ export default function ProfileHome() {
   const { toast } = useToast();
   const router = useRouter();
   const { signOut, user } = useAuth();
-  const { profile, isLoading, error, updateProfile } = useProfile();
+  const { profile, isLoading, error, updateProfile, refreshProfile } = useProfile();
+  const { initiatePayment, isLoading: isPaymentLoading } = useRazorpay();
   
   const [name, setName] = useState("");
   const [goals, setGoals] = useState<string[]>([]);
@@ -41,7 +45,7 @@ export default function ProfileHome() {
   useEffect(() => {
     if (!profile) return;
 
-    // Defer state sync to a microtask to avoid synchronous setState in the effect body.
+    // Defer to a microtask to avoid synchronous setState warning in effects
     queueMicrotask(() => {
       setName(profile.name || "");
       setGoals(profile.goals || []);
@@ -109,9 +113,9 @@ export default function ProfileHome() {
 
   const handleLogout = async () => {
     await signOut();
-    toast({
-      title: "Logged Out",
-      description: "You have been signed out.",
+    toast({ 
+      title: "Logged Out", 
+      description: "You have been signed out." 
     });
     router.push("/login");
   };
@@ -149,21 +153,14 @@ export default function ProfileHome() {
 
   // Error state
   if (error) {
-    const errorMessage =
-      typeof error === "string"
-        ? error
-        : ((error as { message?: string } | null | undefined)?.message ?? "Unknown error");
-
     return (
       <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
         <h1 className="font-display text-2xl font-bold">Profile & Settings</h1>
         <Card className="border-destructive">
           <CardContent className="pt-6">
-            <p className="text-destructive">
-              Failed to load profile: {errorMessage}
-            </p>
-            <Button
-              variant="outline"
+            <p className="text-destructive">Failed to load profile: {error}</p>
+            <Button 
+              variant="outline" 
               className="mt-4"
               onClick={() => window.location.reload()}
             >
@@ -176,7 +173,36 @@ export default function ProfileHome() {
   }
 
   const trialDays = getTrialDaysRemaining();
-  const isPro = profile?.plan === "pro";
+  type ExtendedPlan = Profile["plan"] | "unlimited";
+  const currentPlan: ExtendedPlan = (profile?.plan ?? "free") as ExtendedPlan;
+  const isPro = currentPlan === "pro" || currentPlan === "unlimited";
+  const isUnlimited = currentPlan === "unlimited";
+
+  const handleUpgrade = () => {
+    if (!user) return;
+
+    initiatePayment({
+      amount: 699,
+      planType: "pro",
+      userId: user.id,
+      userEmail: user.email || undefined,
+      userName: profile?.name || undefined,
+      onSuccess: () => {
+        refreshProfile();
+        toast({
+          title: "Welcome to Pro!",
+          description: "You've been upgraded to the Pro plan.",
+        });
+      },
+      onError: (error) => {
+        toast({
+          title: "Payment Failed",
+          description: error,
+          variant: "destructive",
+        });
+      },
+    });
+  };
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
       <h1 className="font-display text-2xl font-bold">Profile & Settings</h1>
@@ -306,13 +332,25 @@ export default function ProfileHome() {
         <CardContent>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="font-medium">
-                {isPro ? (
-                  <span className="text-primary">Pro Plan</span>
-                ) : (
-                  <span>Free Trial</span>
+              <div className="flex items-center gap-2">
+                <p className="font-medium">
+                  {isUnlimited ? (
+                    <span className="text-primary">Unlimited Plan</span>
+                  ) : isPro ? (
+                    <span className="text-primary">Pro Plan</span>
+                  ) : (
+                    <span>Free Trial</span>
+                  )}
+                </p>
+                {(
+                  profile as (Profile & { subscription_active?: boolean }) | null
+                )?.subscription_active && (
+                  <Badge variant="outline" className="text-xs">
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    Active
+                  </Badge>
                 )}
-              </p>
+              </div>
               {!isPro && trialDays > 0 && (
                 <p className="text-sm text-muted-foreground">
                   {trialDays} days remaining
@@ -329,15 +367,39 @@ export default function ProfileHome() {
               <p className="text-xs text-muted-foreground">Credits</p>
             </div>
           </div>
-          {!isPro && (
-            <Button variant="hero" className="w-full">
-              Upgrade to Pro
-            </Button>
-          )}
-          {isPro && (
-            <p className="text-sm text-muted-foreground">
-              Thank you for being a Pro member!
-            </p>
+          {!isPro ? (
+            <div className="space-y-3">
+              <Button 
+                variant="hero" 
+                className="w-full"
+                onClick={handleUpgrade}
+                disabled={isPaymentLoading}
+              >
+                {isPaymentLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Upgrade to Pro - ₹699/mo
+                  </>
+                )}
+              </Button>
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/pricing">View All Plans</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Thank you for being a {isUnlimited ? "Unlimited" : "Pro"} member!
+              </p>
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/pricing">Buy More Credits</Link>
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>

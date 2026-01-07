@@ -13,8 +13,8 @@ export default function RealLifeUseCases() {
 
   return (
     <section className="py-20 px-6">
-        <div className="container mx-auto max-w-6xl">
-          <div className="text-center mb-16">
+        <div className="md:container mx-auto max-w-6xl">
+          <div className="text-center md:mb-16 mb-8">
             <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
               Real-Life Use Cases
             </h2>

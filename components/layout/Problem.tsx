@@ -3,7 +3,7 @@ import { Card, CardContent } from "../ui/card";
 export default function Problem() {
   return (
     <section className="py-20 px-6 bg-muted/30">
-        <div className="container mx-auto max-w-4xl text-center">
+        <div className="md:container mx-auto max-w-4xl text-center">
           <h2 className="font-display text-3xl md:text-4xl font-bold mb-6">
             This is NOT Just Another App
           </h2>

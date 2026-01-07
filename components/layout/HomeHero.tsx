@@ -8,14 +8,14 @@ export default function HomeHero() {
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
         <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-secondary/10 rounded-full blur-3xl" />
         
-        <div className="container mx-auto max-w-5xl relative">
+        <div className="md:container mx-auto max-w-5xl relative">
           <div className="text-center animate-slide-up">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent border border-primary/20 mb-8">
               <Sparkles className="w-4 h-4 text-primary" />
               <span className="text-sm font-medium text-primary">AI-Powered Decision Intelligence</span>
             </div>
             
-            <h1 className="font-display text-5xl md:text-7xl font-bold leading-tight mb-6">
+            <h1 className="font-display text-4xl md:text-7xl font-bold leading-tight mb-6">
               Think Better.
               <br />
               <span className="text-gradient">Decide Faster.</span>
@@ -23,7 +23,7 @@ export default function HomeHero() {
               Grow Daily.
             </h1>
             
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
+            <p className="md:text-xl text-lg text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
               Stop overthinking. Start growing. MindForge uses AI to help you make smarter decisions, 
               build mental clarity, and unlock your potential — one day at a time.
             </p>

@@ -4,8 +4,8 @@ import FeatureCard from "./FeatureCard";
 export default function Features() {
   return (
     <section id="features" className="py-20 px-6 bg-muted/30">
-        <div className="container mx-auto max-w-6xl">
-          <div className="text-center mb-16">
+        <div className="md:container mx-auto max-w-6xl">
+          <div className="text-center md:mb-16 mb-8">
             <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
               Your Personal Growth Arsenal
             </h2>

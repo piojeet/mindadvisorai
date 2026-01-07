@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 export default function CTA() {
   return (
     <section className="py-20 px-6 bg-primary text-primary-foreground">
-    <div className="container mx-auto max-w-3xl text-center">
+    <div className="md:container mx-auto max-w-3xl text-center">
       <h2 className="font-display text-3xl md:text-4xl font-bold mb-6">
         Ready to Think Better?
       </h2>
