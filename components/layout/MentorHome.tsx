@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { Textarea } from "../ui/textarea";
 import { useProfile } from "@/hooks/useProfile";
+import { useToast } from "@/hooks/use-toast";
 
 type Message = {
   id: string;
@@ -15,19 +16,21 @@ type Message = {
 };
 
 export default function MentorHome() {
-    const { profile } = useProfile();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
       role: "assistant",
-      content:
-        "Hello! I'm your AI Mentor. I'm here to help you think through real-life problems — career decisions, money choices, focus issues, or anything else on your mind.\n\nWhat's on your mind today? Share what you're working through, and I'll help you break it down and find clarity.",
+      content: "Hello! I'm your AI Mentor. I'm here to help you think through real-life problems — career decisions, money choices, focus issues, or anything else on your mind.\n\nWhat's on your mind today? Share what you're working through, and I'll help you break it down and find clarity.",
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const { profile, updateProfile } = useProfile();
+
+  const credits = profile?.credits ?? 0;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -37,44 +40,122 @@ export default function MentorHome() {
     scrollToBottom();
   }, [messages]);
 
-  const idRef = useRef(0);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
+    if (credits < 2) {
+      toast({
+        title: "Insufficient Credits",
+        description: "You need at least 2 credits to send a message. Please purchase more credits.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const userMessage: Message = {
-        id: (++idRef.current).toString(),
-        role: "user",
-        content: input,
-        timestamp: new Date(), // ✅ required
-      };
+      id: Date.now().toString(),
+      role: "user",
+      content: input.trim(),
+      timestamp: new Date(),
+    };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: generateAIResponse(input.trim()),
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, aiMessage]);
-      setIsLoading(false);
-    }, 2000);
-  };
+    // Build conversation history for context
+    const conversationHistory = messages
+      .filter((m) => m.id !== "1") // Skip initial welcome message
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
 
-  const generateAIResponse = (userInput: string): string => {
-    // Placeholder responses - will be replaced with actual AI
-    const responses = [
-      "That's a thoughtful question. Let me ask you something first: What outcome would make you feel most satisfied? Understanding your ideal outcome helps us work backwards.\n\n**Consider these angles:**\n1. What's the worst-case scenario, and can you handle it?\n2. What would you advise a friend in this situation?\n3. What's holding you back from the decision right now?",
-      "I hear you. This sounds like a situation where multiple factors are pulling you in different directions. Let's break this down:\n\n**The core question seems to be:** What matters most to you right now — security or growth?\n\nBefore we go deeper, tell me: What would change in your life if you chose path A versus path B?",
-      "This is exactly the kind of problem where structured thinking helps. Here's what I notice:\n\n1. **The immediate concern:** What you're feeling right now\n2. **The underlying issue:** What's really driving this situation\n3. **The path forward:** What you can actually control\n\nWhich of these would you like to explore first?",
-    ];
-    return responses[Math.floor(Math.random() * responses.length)];
+    conversationHistory.push({ role: "user", content: userMessage.content });
+
+    let assistantContent = "";
+
+    try {
+      const response = await fetch(process.env.NEXT_PUBLIC_CHAT_URL as string, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ messages: conversationHistory }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to get response");
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response stream");
+
+      const decoder = new TextDecoder();
+      let textBuffer = "";
+
+      // Add empty assistant message to update
+      const assistantId = (Date.now() + 1).toString();
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: "assistant", content: "", timestamp: new Date() },
+      ]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        textBuffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.startsWith(":") || line.trim() === "") continue;
+          if (!line.startsWith("data: ")) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") break;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              assistantContent += content;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, content: assistantContent } : m
+                )
+              );
+            }
+          } catch {
+            textBuffer = line + "\n" + textBuffer;
+            break;
+          }
+        }
+      }
+
+      // Deduct credits after successful response
+      if (profile) {
+        await updateProfile({ ...profile, credits: Math.max(0, credits - 2) });
+      }
+    } catch (error) {
+      console.error("AI Mentor error:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to get AI response",
+        variant: "destructive",
+      });
+      // Remove the empty assistant message on error
+      setMessages((prev) => prev.filter((m) => m.content !== "" || m.role !== "assistant"));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const examplePrompts = [
@@ -90,13 +171,11 @@ export default function MentorHome() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display text-2xl font-bold mb-1">AI Mentor</h1>
-          <p className="text-sm text-muted-foreground">
-            Get personalized guidance for real-life problems
-          </p>
+          <p className="text-sm text-muted-foreground">Get personalized guidance for real-life problems</p>
         </div>
         <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/10 border border-secondary/20">
           <Coins className="w-4 h-4 text-secondary" />
-          <span className="text-sm font-medium">{profile?.credits || 0} credits left</span>
+          <span className="text-sm font-medium">{credits} credits left</span>
         </div>
       </div>
 
@@ -133,37 +212,26 @@ export default function MentorHome() {
                     : "bg-muted rounded-tl-sm"
                 )}
               >
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {message.content}
-                </p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
               </div>
             </div>
           ))}
-
-          {isLoading && (
+          
+          {isLoading && messages[messages.length - 1]?.content === "" && (
             <div className="flex gap-4">
               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                 <Sparkles className="w-4 h-4 text-primary" />
               </div>
               <div className="bg-muted rounded-2xl rounded-tl-sm p-4">
                 <div className="flex gap-1">
-                  <div
-                    className="w-2 h-2 bg-primary/50 rounded-full animate-bounce"
-                    style={{ animationDelay: "0ms" }}
-                  />
-                  <div
-                    className="w-2 h-2 bg-primary/50 rounded-full animate-bounce"
-                    style={{ animationDelay: "150ms" }}
-                  />
-                  <div
-                    className="w-2 h-2 bg-primary/50 rounded-full animate-bounce"
-                    style={{ animationDelay: "300ms" }}
-                  />
+                  <div className="w-2 h-2 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <div className="w-2 h-2 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <div className="w-2 h-2 bg-primary/50 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                 </div>
               </div>
             </div>
           )}
-
+          
           <div ref={messagesEndRef} />
         </CardContent>
 
@@ -194,16 +262,16 @@ export default function MentorHome() {
               placeholder="Share what's on your mind..."
               className="min-h-[60px] max-h-[150px] resize-none"
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !isLoading) {
+                if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   handleSubmit(e);
                 }
               }}
             />
-            <Button
-              type="submit"
-              variant="hero"
-              size="icon"
+            <Button 
+              type="submit" 
+              variant="hero" 
+              size="icon" 
               className="h-[60px] w-[60px]"
               disabled={!input.trim() || isLoading}
             >
